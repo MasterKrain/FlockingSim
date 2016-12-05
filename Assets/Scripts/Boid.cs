@@ -31,6 +31,8 @@ public class Boid : MonoBehaviour
     [SerializeField]
     private Light m_Light;
 
+    private float m_CurrentMovementSpeed;
+
     private float m_StartRange;
 
     private Color m_LightColor;
@@ -44,7 +46,9 @@ public class Boid : MonoBehaviour
     {
         m_MovementSpeed /= 100;
 
-        m_IsLeader = (Random.value < .05f);
+        m_CurrentMovementSpeed = m_MovementSpeed * 2f;
+
+        SetLeader(Random.value < .05f);
 
         m_StartRange = m_Light.range;
         m_Light.range = .1f;
@@ -66,6 +70,8 @@ public class Boid : MonoBehaviour
 
     void Update()
     {
+        if (m_CurrentMovementSpeed > m_MovementSpeed) m_CurrentMovementSpeed -= .001f;
+
         m_Light.color = m_LightColor;
 
         m_Age += Time.deltaTime;
@@ -94,9 +100,17 @@ public class Boid : MonoBehaviour
         HandleMovement();
     }
 
+    public void SetLeader( bool leader )
+    {
+        m_IsLeader = leader;
+        if (leader) this.transform.SetParent(m_Spawner.LeaderParent.transform);
+        else this.transform.SetParent(m_Spawner.NormalParent.transform);
+    }
+
     private void HandleMovement()
     {
-        if (!m_IsLeader) m_NewDirection = (m_NewDirection + CalculateNewDirection()/* + ((m_Spawner.transform.position - this.transform.position) * .5f)*/).normalized;
+        Vector3 additionalDirection = CalculateAdditionalDirection();
+        m_NewDirection = (m_NewDirection + additionalDirection).normalized;
 
         if (Random.value < .3f) m_NewDirection = Random.insideUnitSphere;
 
@@ -105,10 +119,10 @@ public class Boid : MonoBehaviour
         //Quaternion lookRot = Quaternion.LookRotation(m_CurrentDirection);
         //this.transform.rotation = Quaternion.Lerp(this.transform.rotation, lookRot, Time.deltaTime * 5);
 
-        this.transform.Translate(m_CurrentDirection * m_MovementSpeed);
+        this.transform.Translate(m_CurrentDirection * m_CurrentMovementSpeed);
     }
 
-    private Vector3 CalculateNewDirection()
+    private Vector3 CalculateAdditionalDirection()
     {
         Vector3 directionNew = new Vector3();
 
@@ -122,7 +136,16 @@ public class Boid : MonoBehaviour
 
             Vector3 dirToOther = other.transform.position - this.transform.position;
 
-            // apply the flocking rules
+            // Prevent double-leadership
+            //if (m_IsLeader && other.IsLeader && dist < m_InfluenceRange / 2)
+            //{
+            //    SetLeader(false);
+            //    other.SetLeader(true);
+            //}
+
+            // Whirlpool Effect
+
+
             // attraction
             if (dist > (m_InfluenceRange * m_AttractionEdge))
             {
@@ -142,7 +165,10 @@ public class Boid : MonoBehaviour
             }
         }
 
-        return directionNew;
+        //float centerDistance = Vector3.Distance(this.transform.position, m_Spawner.transform.position);
+        //Vector3 centerAttraction = (centerDistance > 100) ? ((m_Spawner.transform.position - this.transform.position) * (centerDistance / 100)) : Vector3.zero;
+
+        return directionNew;// + centerAttraction;
     }
 
     public Vector3 GetCurrentDirection()

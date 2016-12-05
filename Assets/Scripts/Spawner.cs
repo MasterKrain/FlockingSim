@@ -18,7 +18,9 @@ public class Spawner : MonoBehaviour
     private List<Boid> m_BoidList;
     public List<Boid> BoidList { get { return m_BoidList; } }
 
-    private GameObject m_Parent;
+    private GameObject m_NormalParent, m_LeaderParent;
+    public GameObject NormalParent { get { return m_NormalParent; } }
+    public GameObject LeaderParent { get { return m_LeaderParent; } }
 
     [SerializeField]
     private float m_MovementSpeed = 1f;
@@ -32,6 +34,8 @@ public class Spawner : MonoBehaviour
 
     private Color m_LightColor, m_BoidColor;
 
+    private int m_MaxSpawnDelay = 120;
+
     void Awake()
     {
         m_GameManager = FindObjectOfType<GameManager>();
@@ -44,8 +48,11 @@ public class Spawner : MonoBehaviour
 
         m_BoidList = new List<Boid>();
 
-        m_Parent = new GameObject();
-        m_Parent.name = "Group";
+        m_NormalParent = new GameObject();
+        m_NormalParent.name = "Group";
+
+        m_LeaderParent = new GameObject();
+        m_LeaderParent.name = "LeaderGroup";
 
         m_Rnd = Random.value * 100;
 
@@ -71,7 +78,9 @@ public class Spawner : MonoBehaviour
         if (m_GameManager.Tick % (int)m_Module == 0)
         {
             Spawn(this.transform.position);
-            if (m_Module < 60) m_Module *= 1.1f;
+
+            if (m_Module < m_MaxSpawnDelay) m_Module *= 1.1f;
+
             if (Random.value < .1f) m_Module = 20;
         }
 
@@ -100,7 +109,6 @@ public class Spawner : MonoBehaviour
     public GameObject Spawn( Vector3 pos )
     {
         Boid b = ((GameObject)Instantiate(m_Prefab, pos, Quaternion.identity)).GetComponent<Boid>();
-        b.transform.SetParent(m_Parent.transform);
         m_BoidList.Add(b);
         b.Init(this, m_BoidList.Count, m_BoidColor);
 
@@ -119,4 +127,9 @@ public class Spawner : MonoBehaviour
         m_Light.color = Color.Lerp(m_Light.color, m_LightColor, Time.deltaTime);
     }
     #endregion
+
+    public GameManager GetGameManager()
+    {
+        return m_GameManager;
+    }
 }
