@@ -10,32 +10,31 @@ public class Boid : MonoBehaviour
     private Spawner m_Spawner;
 
     [SerializeField]
-    private float m_MovementSpeed;
-
-    [SerializeField]
-    private float m_InfluenceRange = 5f, m_AttractionEdge = .66f, m_AlignmentEdge = .33f;
-
-    private Vector3 m_CurrentDirection, m_NewDirection;
-
-    [SerializeField]
     private bool m_IsLeader = false;
     public bool IsLeader { get { return m_IsLeader; } set { m_IsLeader = value; } }
 
-    private float m_Age;
-
     [SerializeField]
     private float m_AgeMax = 60;
+    private float m_Age;
+    private float m_CurrentMovementSpeed;
+    private float m_StartRange;
+    [SerializeField]
+    private float m_MovementSpeed;
+    [SerializeField]
+    private float m_InfluenceRange = 5f, m_AttractionEdge = .66f, m_AlignmentEdge = .33f;
 
-    private TrailRenderer m_TrailRenderer;
+    private int m_AmountOfOthers;
+    [SerializeField]
+    private int m_GroupMinimum = 20;
 
     [SerializeField]
     private Light m_Light;
 
-    private float m_CurrentMovementSpeed;
-
-    private float m_StartRange;
+    private TrailRenderer m_TrailRenderer;
 
     private Color m_LightColor;
+
+    private Vector3 m_CurrentDirection, m_NewDirection;
 
     void Awake()
     {
@@ -124,9 +123,11 @@ public class Boid : MonoBehaviour
 
     private Vector3 CalculateAdditionalDirection()
     {
-        Vector3 directionNew = new Vector3();
+        Vector3 directionNew = Vector3.zero;
 
         Collider[] hitColliders = Physics.OverlapSphere(this.transform.position, m_InfluenceRange);
+
+        Vector3 groupCenter = Util.FindAveragePosition(hitColliders);
 
         for (int i = 0; i < hitColliders.Length; ++i)
         {
@@ -136,16 +137,17 @@ public class Boid : MonoBehaviour
 
             Vector3 dirToOther = other.transform.position - this.transform.position;
 
-            // Prevent double-leadership
-            //if (m_IsLeader && other.IsLeader && dist < m_InfluenceRange / 2)
-            //{
-            //    SetLeader(false);
-            //    other.SetLeader(true);
-            //}
+            // Polity
+            if (m_Spawner.GetGameManager().Dictatorship)
+            {
+                if (m_IsLeader && other.IsLeader && dist < m_InfluenceRange / 2)
+                {
+                    SetLeader(false);
+                    other.SetLeader(true);
+                }
+            }
 
-            // Whirlpool Effect
-
-
+            #region Flocking Rules
             // attraction
             if (dist > (m_InfluenceRange * m_AttractionEdge))
             {
@@ -163,12 +165,18 @@ public class Boid : MonoBehaviour
             {
                 directionNew -= dirToOther * .01f;
             }
+            #endregion
+
+            // Whirlpool Effect (WIP)
+            if (hitColliders.Length > m_GroupMinimum && m_Spawner.GetGameManager().DrawGroupCenters)
+            {
+                // add positive y angle perpendicular to distance to group center to directionNew...
+
+                Debug.DrawRay(this.transform.position, groupCenter - this.transform.position, m_LightColor);
+            }
         }
 
-        //float centerDistance = Vector3.Distance(this.transform.position, m_Spawner.transform.position);
-        //Vector3 centerAttraction = (centerDistance > 100) ? ((m_Spawner.transform.position - this.transform.position) * (centerDistance / 100)) : Vector3.zero;
-
-        return directionNew;// + centerAttraction;
+        return directionNew;
     }
 
     public Vector3 GetCurrentDirection()
