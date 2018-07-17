@@ -1,34 +1,41 @@
-﻿using UnityEngine;
-using System.Collections;
-using UnityEngine.SceneManagement;
+﻿using System.Collections;
 
-public class GameManager : MonoBehaviour
+using UnityEngine;
+
+using BoneBox;
+
+namespace Flocking
 {
-    private int m_Tick = 0;
-    public int Tick { get { return m_Tick; } }
+	public class GameManager : Singleton<GameManager>
+	{
+		[SerializeField]
+		private bool _drawGroupCenters = false;
 
-    [SerializeField]
-    private bool m_DrawGroupCenters = false;
-    public bool DrawGroupCenters { get { return m_DrawGroupCenters; } }
+		[SerializeField]
+		private bool _dictatorship = false;
 
-    [SerializeField]
-    private bool m_Dictatorship = false;
-    public bool Dictatorship { get { return m_Dictatorship; } }
+		[SerializeField]
+		private bool _assignRandomLeader = false;
 
-    void Awake()
-    {
-        Random.InitState((int)System.DateTime.Now.Ticks);
-    }
+		private int _updates = 0;
 
-    void Start()
-    {
-        m_Tick = 0;
-    }
+		public bool DrawGroupCenters { get { return _drawGroupCenters; } }
+		public bool Dictatorship { get { return _dictatorship; } }
+		public bool AssignRandomLeader { get { return _assignRandomLeader; } set { _assignRandomLeader = value; } }
+		public int Updates { get { return _updates; } }
 
-    void Update()
-    {
-        m_Tick++;
+		protected override void Awake()
+		{
+			base.Awake();
 
-        if (Input.GetKeyDown(KeyCode.R)) SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    }
+			_updates = 0;
+
+			Random.InitState((int) System.DateTime.Now.Ticks);
+		}
+
+		void Update()
+		{
+			_updates++;
+		}
+	}
 }

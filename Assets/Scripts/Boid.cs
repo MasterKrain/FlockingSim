@@ -1,143 +1,62 @@
-﻿using UnityEngine;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
-using Flocking.Management;
-using Flocking.Util;
+
+using UnityEngine;
 
 namespace Flocking
 {
+	using Utils;
+
 	public class Boid : MonoBehaviour
 	{
-		private Spawner m_Spawner;
-		private TrailRenderer m_TrailRenderer;
+		[SerializeField] private Light _light = null;
+		[SerializeField] private bool _randomizeLightColor = false;
+		[SerializeField] private bool _isLeader = false;
+		[SerializeField] private float _ageMax = 60;
+		[SerializeField] private float _movementSpeed = 4f;
+		[SerializeField] private float _influenceRange = 10f;
+		[SerializeField] private float _attractionEdge = .6f;
+		[SerializeField] private float _alignmentEdge = .3f;
+		[SerializeField] private int _groupMinimum = 20;
+		[SerializeField, Range(0, 1)] private float _randomMovingness = .85f;
 
-		private int m_ID;
-		private int m_AmountOfOthers;
-		private float m_Age;
-		private float m_CurrentMovementSpeed;
-		private float m_StartRange;
-		private Vector3 m_CurrentDirection;
-		private Vector3 m_NewDirection;
-		private Color m_LightColor;
+		private GameManager _gameManager;
+		private Spawner _spawner;
+		private TrailRenderer _trailRenderer;
 
-		public int ID { get { return m_ID; } }
-		public bool IsLeader { get { return m_IsLeader; } set { m_IsLeader = value; } }
-		public Vector3 CurrentDirection { get { return m_CurrentDirection; } }
+		private bool _initialised;
+		private int _id;
+		private int _amountOfOthers;
+		private float _age;
+		private float _currentMovementSpeed;
+		private float _startRange;
+		private Vector3 _currentDirection;
+		private Vector3 _newDirection;
+		private Color _lightColor;
 
-		[SerializeField] private bool m_IsLeader = false;
-		[SerializeField] private float m_AgeMax = 60;
-		[SerializeField] private float m_MovementSpeed;
-		[SerializeField] private float m_InfluenceRange = 5f, m_AttractionEdge = .66f, m_AlignmentEdge = .33f;
-		[SerializeField] private int m_GroupMinimum = 20;
-		[SerializeField] private Light m_Light;
-		[Range(0, 1)] [SerializeField] private float m_RandomMovingness = .3f;
-
-		private void Awake()
-		{
-			m_TrailRenderer = GetComponent<TrailRenderer>();
-		}
-
-		private void Start()
-		{
-			m_CurrentMovementSpeed = m_MovementSpeed * 2f;
-
-			SetLeader(Random.value < .05f);
-
-			m_StartRange = m_Light.range;
-			m_Light.range = .1f;
-
-			m_Age = .0f;
-
-			m_TrailRenderer.startColor = m_LightColor;
-			m_TrailRenderer.endColor = m_LightColor;
-
-			//m_LightColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
-
-			m_NewDirection = Random.insideUnitSphere;
-			m_CurrentDirection = m_NewDirection;
-		}
-
-		public void Init(Spawner spawner, int id, Color color)
-		{
-			m_Spawner = spawner;
-			m_ID = id;
-			m_LightColor = color;
-		}
-
-		private void Update()
-		{
-			m_Age += Time.deltaTime;
-
-			if (m_CurrentMovementSpeed > m_MovementSpeed) {
-				m_CurrentMovementSpeed -= .1f * Time.deltaTime;
-			}
-
-			m_Light.color = m_LightColor;
-
-			if (m_Age >= m_AgeMax) {
-				if (transform.localScale.magnitude > .0f) {
-					Vector3 scale = transform.localScale;
-					scale.x -= .001f;
-					scale.y -= .001f;
-					scale.z -= .001f;
-					transform.localScale = scale;
-				}
-
-				m_TrailRenderer.startWidth = transform.localScale.x;
-				m_Light.range -= .002f;
-
-				if (m_Light.range <= .01f) {
-					Destroy(gameObject);
-				}
-			} else {
-				if (m_Light.range < m_StartRange) {
-					m_Light.range += .01f;
-				}
-			}
-
-			HandleMovement();
-		}
-
-		public void SetLeader(bool leader)
-		{
-			m_IsLeader = leader;
-			if (leader) {
-				transform.SetParent(m_Spawner.LeaderContainer.transform);
-			} else {
-				transform.SetParent(m_Spawner.Container.transform);
-			}
-		}
-
-		private void HandleMovement()
-		{
-			Vector3 additionalDirection = CalculateAdditionalDirection();
-			m_NewDirection = (m_NewDirection + additionalDirection).normalized;
-
-			if (Random.value < m_RandomMovingness) {
-				m_NewDirection += Random.insideUnitSphere;
-			}
-
-			m_CurrentDirection = Vector3.Lerp(m_CurrentDirection, m_NewDirection.normalized, Time.deltaTime);
-
-			transform.Translate(m_CurrentDirection * m_CurrentMovementSpeed * Time.deltaTime);
-		}
+		public int ID { get { return _id; } }
+		public bool IsLeader { get { return _isLeader; } set { _isLeader = value; } }
+		public Vector3 CurrentDirection { get { return _currentDirection; } }
 
 		private Vector3 CalculateAdditionalDirection()
 		{
 			Vector3 newDirection = Vector3.zero;
 
-			Collider[] hitColliders = Physics.OverlapSphere(transform.position, m_InfluenceRange);
+			Collider[] hitColliders = Physics.OverlapSphere(transform.position, _influenceRange);
 
-			Vector3 groupCenter = MathUtil.FindAveragePosition(hitColliders);
+			Vector3 groupCenter = MathUtils.FindAveragePosition(hitColliders);
 
-			for (int i = 0; i < hitColliders.Length; ++i) {
+			for (int i = 0; i < hitColliders.Length; ++i)
+			{
 				Boid other = hitColliders[i].transform.parent.GetComponent<Boid>();
 				float dist = Vector3.Distance(transform.position, other.transform.position);
 				Vector3 dirToOther = other.transform.position - transform.position;
 
 				// Polity
-				if (GameManager.Instance.Dictatorship) {
-					if (m_IsLeader && other.IsLeader && dist < m_InfluenceRange / 2) {
+				if (GameManager.Instance.Dictatorship)
+				{
+					if (_isLeader && other.IsLeader && dist < _influenceRange / 2)
+					{
 						SetLeader(false);
 						other.SetLeader(true);
 					}
@@ -146,31 +65,144 @@ namespace Flocking
 				#region Flocking Rules
 
 				// attraction
-				if (dist > (m_InfluenceRange * m_AttractionEdge)) {
+				if (dist > (_influenceRange * _attractionEdge))
+				{
 					newDirection += dirToOther * ((other.IsLeader) ? 10f : .01f);
 				}
 
 				// alignment
-				if (dist < (m_InfluenceRange * m_AttractionEdge) && dist > (m_InfluenceRange * m_AlignmentEdge)) {
+				if (dist < (_influenceRange * _attractionEdge) && dist > (_influenceRange * _alignmentEdge))
+				{
 					newDirection += other.CurrentDirection * ((other.IsLeader) ? 1f : .01f);
 				}
 
 				// repulsion
-				if (dist < (m_InfluenceRange * m_AlignmentEdge)) {
+				if (dist < (_influenceRange * _alignmentEdge))
+				{
 					newDirection -= dirToOther * .01f;
 				}
 
 				#endregion Flocking Rules
 
 				// Whirlpool Effect (WIP)
-				if (hitColliders.Length > m_GroupMinimum && GameManager.Instance.DrawGroupCenters) {
+				if (hitColliders.Length > _groupMinimum && GameManager.Instance.DrawGroupCenters)
+				{
 					// add positive y angle perpendicular to direction to group center to directionNew...
 
-					Debug.DrawRay(transform.position, groupCenter - transform.position, m_LightColor);
+					Debug.DrawRay(transform.position, groupCenter - transform.position, _lightColor);
 				}
 			}
 
 			return newDirection;
+		}
+
+		public void SetLeader(bool leader)
+		{
+			if (!_initialised)
+				return;
+
+			_isLeader = leader;
+			if (leader)
+			{
+				transform.SetParent(_spawner.LeaderContainer.transform);
+			}
+			else
+			{
+				transform.SetParent(_spawner.Container.transform);
+			}
+		}
+
+		void Awake()
+		{
+			_currentMovementSpeed = _movementSpeed * 2f;
+			_startRange = _light.range;
+			_light.range = .1f;
+
+			_age = .0f;
+
+			if (_randomizeLightColor)
+			{
+				_lightColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
+			}
+
+			_newDirection = Random.insideUnitSphere;
+			_currentDirection = _newDirection;
+
+			_trailRenderer = GetComponent<TrailRenderer>();
+
+			_trailRenderer.startColor = _lightColor;
+			_trailRenderer.endColor = _lightColor;
+		}
+
+		void Start()
+		{
+			_gameManager = GameManager.Instance;
+		}
+
+		public void Init(Spawner spawner, int id, Color color)
+		{
+			_spawner = spawner;
+			_id = id;
+			_lightColor = color;
+			_initialised = true;
+
+			SetLeader(Random.value < .05f);
+		}
+
+		private void HandleMovement()
+		{
+			Vector3 additionalDirection = CalculateAdditionalDirection();
+			_newDirection = (_newDirection + additionalDirection).normalized;
+
+			if (Random.value < _randomMovingness)
+			{
+				_newDirection += Random.insideUnitSphere;
+			}
+
+			_currentDirection = Vector3.Lerp(_currentDirection, _newDirection.normalized, Time.deltaTime);
+
+			transform.Translate(_currentDirection * _currentMovementSpeed * Time.deltaTime);
+		}
+
+		private void Update()
+		{
+			_age += Time.deltaTime;
+
+			if (_currentMovementSpeed > _movementSpeed)
+			{
+				_currentMovementSpeed -= .1f * Time.deltaTime;
+			}
+
+			_light.color = _lightColor;
+
+			if (_age >= _ageMax)
+			{
+				if (transform.localScale.magnitude > .0f)
+				{
+					Vector3 scale = transform.localScale;
+					scale.x -= .001f;
+					scale.y -= .001f;
+					scale.z -= .001f;
+					transform.localScale = scale;
+				}
+
+				_trailRenderer.startWidth = transform.localScale.x;
+				_light.range -= .002f;
+
+				if (_light.range <= .01f)
+				{
+					Destroy(gameObject);
+				}
+			}
+			else
+			{
+				if (_light.range < _startRange)
+				{
+					_light.range += .01f;
+				}
+			}
+
+			HandleMovement();
 		}
 	}
 }
