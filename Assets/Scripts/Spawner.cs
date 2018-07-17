@@ -1,135 +1,127 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Flocking.Management;
 
-public class Spawner : MonoBehaviour
+namespace Flocking
 {
-    private GameManager m_GameManager;
+	public class Spawner : MonoBehaviour
+	{
+		private GameManager m_GameManager;
 
-    [SerializeField]
-    private GameObject m_Prefab;
+		private float m_SpawnRateModulus;
+		private float m_RandomNumber;
+		private float m_BoidColorResetTimer;
+		private Vector3 m_CurrentDirection;
+		private Vector3 m_NewDirection;
+		private GameObject m_Container;
+		private GameObject m_LeaderContainer;
+		private List<Boid> m_BoidList;
+		private Light m_Light;
+		private Color m_LightColor;
+		private Color m_BoidColor;
 
-    [SerializeField]
-    private float m_Range;
+		public List<Boid> BoidList { get { return m_BoidList; } }
+		public GameObject Container { get { return m_Container; } }
+		public GameObject LeaderContainer { get { return m_LeaderContainer; } }
 
-    [SerializeField]
-    private int m_Amount;
+		[SerializeField] private float m_LightIntensityAmp;
+		[SerializeField] private float m_MovementSpeed;
+		[Header("Spawning")] [SerializeField] private GameObject m_Prefab;
+		[SerializeField] private int m_MaxSpawnDelay;
+		[SerializeField] private float m_BoidColorResetTime;
 
-    private List<Boid> m_BoidList;
-    public List<Boid> BoidList { get { return m_BoidList; } }
+		private void Awake()
+		{
+			m_BoidList = new List<Boid>();
+			m_Container = new GameObject("Group");
+			m_LeaderContainer = new GameObject("Leader Group");
 
-    private GameObject m_NormalParent, m_LeaderParent;
-    public GameObject NormalParent { get { return m_NormalParent; } }
-    public GameObject LeaderParent { get { return m_LeaderParent; } }
+			m_RandomNumber = Random.value * 100;
+		}
 
-    [SerializeField]
-    private float m_MovementSpeed = 1f;
+		private void Start()
+		{
+			m_GameManager = FindObjectOfType<GameManager>();
+			m_Light = GetComponent<Light>();
 
-    private Vector3 m_CurrentDirection, m_NewDirection;
+			//AssignRandomLeader();
 
-    private float m_Module;
+			m_NewDirection = Random.insideUnitSphere;
+			m_CurrentDirection = m_NewDirection;
 
-    private float m_Rnd;
-    private Light m_Light;
+			m_SpawnRateModulus = 1;
 
-    private Color m_LightColor, m_BoidColor;
+			m_BoidColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
+		}
 
-    private int m_MaxSpawnDelay = 120;
+		private void Update()
+		{
+			m_BoidColorResetTimer += Time.deltaTime;
 
-    void Awake()
-    {
-        m_GameManager = FindObjectOfType<GameManager>();
-        m_Light = GetComponent<Light>();
-    }
+			if (m_BoidColorResetTimer >= m_BoidColorResetTime) {
+				m_BoidColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
+				m_BoidColorResetTimer = 0f;
+			}
 
-    void Start()
-    {
-        m_MovementSpeed /= 100;
+			if (m_GameManager.Updates % (int) m_SpawnRateModulus == 0f) {
+				Spawn(transform.position);
 
-        m_BoidList = new List<Boid>();
+				if (m_SpawnRateModulus < m_MaxSpawnDelay) {
+					m_SpawnRateModulus *= 1.1f;
+				}
 
-        m_NormalParent = new GameObject();
-        m_NormalParent.name = "Group";
+				if (Random.value < .1f) {
+					m_SpawnRateModulus = 20;
+				}
+			}
 
-        m_LeaderParent = new GameObject();
-        m_LeaderParent.name = "LeaderGroup";
+			RandomizeLightIntensity();
+			//RandomizeLightColor();
 
-        m_Rnd = Random.value * 100;
+			HandleMovement();
+		}
 
-        //for (int i = 0; i < m_Amount; i++)
-        //{
-        //    Spawn(this.transform.position + Random.insideUnitSphere * m_Range);
-        //}
+		private void AssignRandomLeader()
+		{
+			Boid leader = m_BoidList[Random.Range(0, m_BoidList.Count)];
+			leader.IsLeader = true;
+			leader.name += "Leader";
+		}
 
-        //AssignRandomLeader();
+		private void HandleMovement()
+		{
+			if (Random.value < .1f) {
+				m_NewDirection = Random.insideUnitSphere;
+			}
 
-        m_NewDirection = Random.insideUnitSphere;
-        m_CurrentDirection = m_NewDirection;
+			m_CurrentDirection = Vector3.Slerp(m_CurrentDirection, m_NewDirection, Time.deltaTime);
 
-        m_Module = 1;
+			transform.Translate(m_CurrentDirection * m_MovementSpeed * Time.deltaTime);
+		}
 
-        m_BoidColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
-    }
+		public Boid Spawn(Vector3 pos)
+		{
+			Boid boid = Instantiate(m_Prefab, pos, Quaternion.identity).GetComponent<Boid>();
+			m_BoidList.Add(boid);
+			boid.Init(this, m_BoidList.Count, m_BoidColor);
 
-    void Update()
-    {
-        if (m_GameManager.Tick % 300 == 0) m_BoidColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
+			return boid;
+		}
 
-        if (m_GameManager.Tick % (int)m_Module == 0)
-        {
-            Spawn(this.transform.position);
+		#region Light Effects
 
-            if (m_Module < m_MaxSpawnDelay) m_Module *= 1.1f;
+		private void RandomizeLightIntensity()
+		{
+			m_Light.intensity = Mathf.PerlinNoise(m_RandomNumber + Time.time, m_RandomNumber + 1 + Time.time) * m_LightIntensityAmp;
+		}
 
-            if (Random.value < .1f) m_Module = 20;
-        }
+		private void RandomizeLightColor()
+		{
+			m_LightColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
+			m_Light.color = Color.Lerp(m_Light.color, m_LightColor, Time.deltaTime);
+		}
 
-        RandomizeLightIntensity();
-        //RandomizeLightColor();
-
-        //HandleMovement();
-    }
-
-    private void AssignRandomLeader()
-    {
-        Boid leader = m_BoidList[Random.Range(0, m_BoidList.Count)];
-        leader.IsLeader = true;
-        leader.name += "Leader";
-    }
-
-    private void HandleMovement()
-    {
-        if (Random.value < .3f) m_NewDirection = Random.insideUnitSphere;
-
-        m_CurrentDirection = Vector3.Slerp(m_CurrentDirection, m_NewDirection, Time.deltaTime);
-
-        this.transform.Translate(m_CurrentDirection * m_MovementSpeed);
-    }
-
-    public GameObject Spawn( Vector3 pos )
-    {
-        Boid b = ((GameObject)Instantiate(m_Prefab, pos, Quaternion.identity)).GetComponent<Boid>();
-        m_BoidList.Add(b);
-        b.Init(this, m_BoidList.Count, m_BoidColor);
-
-        return b.gameObject;
-    }
-
-    #region Light Effects
-    private void RandomizeLightIntensity()
-    {
-        m_Light.intensity = 2 * Mathf.PerlinNoise(m_Rnd + Time.time, m_Rnd + 1 + Time.time * 1);
-    }
-
-    private void RandomizeLightColor()
-    {
-        m_LightColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
-        m_Light.color = Color.Lerp(m_Light.color, m_LightColor, Time.deltaTime);
-    }
-    #endregion
-
-    public GameManager GetGameManager()
-    {
-        return m_GameManager;
-    }
+		#endregion Light Effects
+	}
 }

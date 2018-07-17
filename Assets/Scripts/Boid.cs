@@ -1,186 +1,176 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using Flocking.Management;
+using Flocking.Util;
 
-public class Boid : MonoBehaviour
+namespace Flocking
 {
-    private int m_ID;
-    public int ID { get { return m_ID; } }
+	public class Boid : MonoBehaviour
+	{
+		private Spawner m_Spawner;
+		private TrailRenderer m_TrailRenderer;
 
-    private Spawner m_Spawner;
+		private int m_ID;
+		private int m_AmountOfOthers;
+		private float m_Age;
+		private float m_CurrentMovementSpeed;
+		private float m_StartRange;
+		private Vector3 m_CurrentDirection;
+		private Vector3 m_NewDirection;
+		private Color m_LightColor;
 
-    [SerializeField]
-    private bool m_IsLeader = false;
-    public bool IsLeader { get { return m_IsLeader; } set { m_IsLeader = value; } }
+		public int ID { get { return m_ID; } }
+		public bool IsLeader { get { return m_IsLeader; } set { m_IsLeader = value; } }
+		public Vector3 CurrentDirection { get { return m_CurrentDirection; } }
 
-    [SerializeField]
-    private float m_AgeMax = 60;
-    private float m_Age;
-    private float m_CurrentMovementSpeed;
-    private float m_StartRange;
-    [SerializeField]
-    private float m_MovementSpeed;
-    [SerializeField]
-    private float m_InfluenceRange = 5f, m_AttractionEdge = .66f, m_AlignmentEdge = .33f;
+		[SerializeField] private bool m_IsLeader = false;
+		[SerializeField] private float m_AgeMax = 60;
+		[SerializeField] private float m_MovementSpeed;
+		[SerializeField] private float m_InfluenceRange = 5f, m_AttractionEdge = .66f, m_AlignmentEdge = .33f;
+		[SerializeField] private int m_GroupMinimum = 20;
+		[SerializeField] private Light m_Light;
+		[Range(0, 1)] [SerializeField] private float m_RandomMovingness = .3f;
 
-    private int m_AmountOfOthers;
-    [SerializeField]
-    private int m_GroupMinimum = 20;
+		private void Awake()
+		{
+			m_TrailRenderer = GetComponent<TrailRenderer>();
+		}
 
-    [SerializeField]
-    private Light m_Light;
+		private void Start()
+		{
+			m_CurrentMovementSpeed = m_MovementSpeed * 2f;
 
-    private TrailRenderer m_TrailRenderer;
+			SetLeader(Random.value < .05f);
 
-    private Color m_LightColor;
+			m_StartRange = m_Light.range;
+			m_Light.range = .1f;
 
-    private Vector3 m_CurrentDirection, m_NewDirection;
+			m_Age = .0f;
 
-    void Awake()
-    {
-        m_TrailRenderer = GetComponent<TrailRenderer>();
-    }
+			m_TrailRenderer.startColor = m_LightColor;
+			m_TrailRenderer.endColor = m_LightColor;
 
-    void Start()
-    {
-        m_MovementSpeed /= 100;
+			//m_LightColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
 
-        m_CurrentMovementSpeed = m_MovementSpeed * 2f;
+			m_NewDirection = Random.insideUnitSphere;
+			m_CurrentDirection = m_NewDirection;
+		}
 
-        SetLeader(Random.value < .05f);
+		public void Init(Spawner spawner, int id, Color color)
+		{
+			m_Spawner = spawner;
+			m_ID = id;
+			m_LightColor = color;
+		}
 
-        m_StartRange = m_Light.range;
-        m_Light.range = .1f;
+		private void Update()
+		{
+			m_Age += Time.deltaTime;
 
-        m_Age = .0f;
+			if (m_CurrentMovementSpeed > m_MovementSpeed) {
+				m_CurrentMovementSpeed -= .1f * Time.deltaTime;
+			}
 
-        //m_LightColor = Random.ColorHSV(0f, 1f, 1f, 1f, 1f, 1f);
+			m_Light.color = m_LightColor;
 
-        m_NewDirection = Random.insideUnitSphere;
-        m_CurrentDirection = m_NewDirection;
-    }
+			if (m_Age >= m_AgeMax) {
+				if (transform.localScale.magnitude > .0f) {
+					Vector3 scale = transform.localScale;
+					scale.x -= .001f;
+					scale.y -= .001f;
+					scale.z -= .001f;
+					transform.localScale = scale;
+				}
 
-    public void Init( Spawner spawner, int id, Color color )
-    {
-        m_Spawner = spawner;
-        m_ID = id;
-        m_LightColor = color;
-    }
+				m_TrailRenderer.startWidth = transform.localScale.x;
+				m_Light.range -= .002f;
 
-    void Update()
-    {
-        if (m_CurrentMovementSpeed > m_MovementSpeed) m_CurrentMovementSpeed -= .001f;
+				if (m_Light.range <= .01f) {
+					Destroy(gameObject);
+				}
+			} else {
+				if (m_Light.range < m_StartRange) {
+					m_Light.range += .01f;
+				}
+			}
 
-        m_Light.color = m_LightColor;
+			HandleMovement();
+		}
 
-        m_Age += Time.deltaTime;
+		public void SetLeader(bool leader)
+		{
+			m_IsLeader = leader;
+			if (leader) {
+				transform.SetParent(m_Spawner.LeaderContainer.transform);
+			} else {
+				transform.SetParent(m_Spawner.Container.transform);
+			}
+		}
 
-        if (m_Age >= m_AgeMax)
-        {
-            if (this.transform.localScale.x > .0f)
-            {
-                Vector3 scale = this.transform.localScale;
-                scale.x -= .001f;
-                scale.y -= .001f;
-                scale.z -= .001f;
-                this.transform.localScale = scale;
-            }
+		private void HandleMovement()
+		{
+			Vector3 additionalDirection = CalculateAdditionalDirection();
+			m_NewDirection = (m_NewDirection + additionalDirection).normalized;
 
-            m_TrailRenderer.startWidth = this.transform.localScale.x;
-            m_Light.range -= .002f;
+			if (Random.value < m_RandomMovingness) {
+				m_NewDirection += Random.insideUnitSphere;
+			}
 
-            if (m_Light.range <= .01f) Destroy(gameObject);
-        }
-        else
-        {
-            if (m_Light.range < m_StartRange) m_Light.range += .01f;
-        }
+			m_CurrentDirection = Vector3.Lerp(m_CurrentDirection, m_NewDirection.normalized, Time.deltaTime);
 
-        HandleMovement();
-    }
+			transform.Translate(m_CurrentDirection * m_CurrentMovementSpeed * Time.deltaTime);
+		}
 
-    public void SetLeader( bool leader )
-    {
-        m_IsLeader = leader;
-        if (leader) this.transform.SetParent(m_Spawner.LeaderParent.transform);
-        else this.transform.SetParent(m_Spawner.NormalParent.transform);
-    }
+		private Vector3 CalculateAdditionalDirection()
+		{
+			Vector3 newDirection = Vector3.zero;
 
-    private void HandleMovement()
-    {
-        Vector3 additionalDirection = CalculateAdditionalDirection();
-        m_NewDirection = (m_NewDirection + additionalDirection).normalized;
+			Collider[] hitColliders = Physics.OverlapSphere(transform.position, m_InfluenceRange);
 
-        if (Random.value < .3f) m_NewDirection = Random.insideUnitSphere;
+			Vector3 groupCenter = MathUtil.FindAveragePosition(hitColliders);
 
-        m_CurrentDirection = Vector3.Slerp(m_CurrentDirection, m_NewDirection, Time.deltaTime);
+			for (int i = 0; i < hitColliders.Length; ++i) {
+				Boid other = hitColliders[i].transform.parent.GetComponent<Boid>();
+				float dist = Vector3.Distance(transform.position, other.transform.position);
+				Vector3 dirToOther = other.transform.position - transform.position;
 
-        //Quaternion lookRot = Quaternion.LookRotation(m_CurrentDirection);
-        //this.transform.rotation = Quaternion.Lerp(this.transform.rotation, lookRot, Time.deltaTime * 5);
+				// Polity
+				if (GameManager.Instance.Dictatorship) {
+					if (m_IsLeader && other.IsLeader && dist < m_InfluenceRange / 2) {
+						SetLeader(false);
+						other.SetLeader(true);
+					}
+				}
 
-        this.transform.Translate(m_CurrentDirection * m_CurrentMovementSpeed);
-    }
+				#region Flocking Rules
 
-    private Vector3 CalculateAdditionalDirection()
-    {
-        Vector3 directionNew = Vector3.zero;
+				// attraction
+				if (dist > (m_InfluenceRange * m_AttractionEdge)) {
+					newDirection += dirToOther * ((other.IsLeader) ? 10f : .01f);
+				}
 
-        Collider[] hitColliders = Physics.OverlapSphere(this.transform.position, m_InfluenceRange);
+				// alignment
+				if (dist < (m_InfluenceRange * m_AttractionEdge) && dist > (m_InfluenceRange * m_AlignmentEdge)) {
+					newDirection += other.CurrentDirection * ((other.IsLeader) ? 1f : .01f);
+				}
 
-        Vector3 groupCenter = Util.FindAveragePosition(hitColliders);
+				// repulsion
+				if (dist < (m_InfluenceRange * m_AlignmentEdge)) {
+					newDirection -= dirToOther * .01f;
+				}
 
-        for (int i = 0; i < hitColliders.Length; ++i)
-        {
-            Boid other = hitColliders[i].transform.parent.GetComponent<Boid>();
+				#endregion Flocking Rules
 
-            float dist = Vector3.Distance(this.transform.position, other.transform.position);
+				// Whirlpool Effect (WIP)
+				if (hitColliders.Length > m_GroupMinimum && GameManager.Instance.DrawGroupCenters) {
+					// add positive y angle perpendicular to direction to group center to directionNew...
 
-            Vector3 dirToOther = other.transform.position - this.transform.position;
+					Debug.DrawRay(transform.position, groupCenter - transform.position, m_LightColor);
+				}
+			}
 
-            // Polity
-            if (m_Spawner.GetGameManager().Dictatorship)
-            {
-                if (m_IsLeader && other.IsLeader && dist < m_InfluenceRange / 2)
-                {
-                    SetLeader(false);
-                    other.SetLeader(true);
-                }
-            }
-
-            #region Flocking Rules
-            // attraction
-            if (dist > (m_InfluenceRange * m_AttractionEdge))
-            {
-                directionNew += dirToOther * ((other.IsLeader) ? 10f : .01f);
-            }
-
-            // alignment
-            if (dist < (m_InfluenceRange * m_AttractionEdge) && dist > (m_InfluenceRange * m_AlignmentEdge))
-            {
-                directionNew += other.GetCurrentDirection() * ((other.IsLeader) ? 1f : .01f);
-            }
-
-            // repulsion
-            if (dist < (m_InfluenceRange * m_AlignmentEdge))
-            {
-                directionNew -= dirToOther * .01f;
-            }
-            #endregion
-
-            // Whirlpool Effect (WIP)
-            if (hitColliders.Length > m_GroupMinimum && m_Spawner.GetGameManager().DrawGroupCenters)
-            {
-                // add positive y angle perpendicular to distance to group center to directionNew...
-
-                Debug.DrawRay(this.transform.position, groupCenter - this.transform.position, m_LightColor);
-            }
-        }
-
-        return directionNew;
-    }
-
-    public Vector3 GetCurrentDirection()
-    {
-        return m_CurrentDirection;
-    }
+			return newDirection;
+		}
+	}
 }
